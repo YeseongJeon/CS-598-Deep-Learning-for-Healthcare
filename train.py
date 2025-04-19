@@ -74,6 +74,7 @@ def _train_adversarial(datasetclass, checkpoint_path, logpath):
     print("area under ROC curve of pneumonia: {:.04f}".format(auroc))
     
 def main():
+    print("running train")
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset', action="store", default='MIMIC')
     parser.add_argument('training', action="store", default='Standard')

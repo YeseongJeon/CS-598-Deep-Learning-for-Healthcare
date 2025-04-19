@@ -56,13 +56,13 @@ class CXRDataset(torch.utils.data.Dataset):
     # define torchvision transforms as class attribute
     _transforms = {
         'train': transforms.Compose([
-            transforms.Scale(224),
+            transforms.Resize(224),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(mean, std)
         ]),
         'val': transforms.Compose([
-            transforms.Scale(224),
+            transforms.Resize(224),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(mean, std)
@@ -212,6 +212,114 @@ class CheXpertDataset(CXRDataset):
             output[isample] = self.df['AP/PA'][isample] == 'AP'
         return output
         
+
+class NIHDataset(CXRDataset):
+    def __init__(
+            self,
+            fold,
+            include_lateral=False,
+            random_state=30493):
+        '''
+        Create a dataset of the NIH images for use in a PyTorch model.
+
+        Args:
+            fold (str): The shard of the CheXPert data that the dataset should
+                contain. One of either 'train', 'val', or 'test'. The 'test'
+                fold corresponds to the images specified in 'valid.csv' in the 
+                CheXPert data, while the the 'train' and 'val' folds
+                correspond to disjoint subsets of the patients in the 
+                'train.csv' provided with the CheXpert data.
+            random_state (int): An integer used to see generation of the 
+                train/val split from the patients specified in the 'train.csv'
+                file provided with the CheXpert dataset. Used to ensure 
+                reproducability across runs.
+            include_lateral (bool): If True, include the lateral radiograph
+                views in the dataset. If False, include only frontal views.
+        '''
+
+        self.transform = self._transforms[fold]
+        self.path_to_images = "../data/CheXpert/"
+        self.fold = fold
+
+        # Load files containing labels, and perform train/valid split if necessary
+        if fold == 'train' or fold == 'val':
+            trainvalpath = os.path.join(
+                    self.path_to_images, 
+                    'CheXpert-v1.0-small/train.csv')
+            self.df = pandas.read_csv(trainvalpath)
+            self.df.set_index("Path", inplace=True)
+            
+            if not include_lateral:
+                self.df = self.df[self.df['Frontal/Lateral'] == 'Frontal']
+            
+            train, val = grouped_split(
+                self.df,
+                random_state=random_state,
+                test_size=0.05)
+            if fold == 'train':
+                self.df = train
+            else:
+                self.df = val
+        elif fold == 'test':
+            testpath = os.path.join(
+                    self.path_to_images, 
+                    'CheXpert-v1.0-small/valid.csv')
+            self.df = pandas.read_csv(testpath)
+            self.df.set_index("Path", inplace=True)
+            if not include_lateral:
+                self.df = self.df[self.df['Frontal/Lateral'] == 'Frontal']
+        else:
+            raise ValueError("Invalid fold: {:s}".format(str(fold)))
+            
+        self.labels = [
+            'Enlarged Cardiomediastinum',
+            'Cardiomegaly',
+            'Lung Opacity',
+            'Lung Lesion',
+            'Edema',
+            'Consolidation',
+            'Pneumonia',
+            'Atelectasis',
+            'Pneumothorax',
+            'Pleural Effusion',
+            'Pleural Other',
+            'Fracture',
+            'Support Devices']
+    
+    def __getitem__(self, idx):
+
+        image = Image.open(
+            os.path.join(
+                self.path_to_images,
+                self.df.index[idx]))
+        image = image.convert('RGB')
+
+        label = numpy.zeros(len(self.labels), dtype=int)
+        for i in range(0, len(self.labels)):
+            if self.labels[i] != "N/A":
+                if(self.df[self.labels[i].strip()].iloc[idx].astype('int') > 0):
+                    label[i] = self.df[self.labels[i].strip()
+                                       ].iloc[idx].astype('int')
+
+        if self.transform:
+            image = self.transform(image)
+
+        appa = self.df['AP/PA'][idx] == 'AP'
+
+        return (image, label, self.df.index[idx], appa)
+    
+    def get_all_view_labels(self):
+        '''
+        Return a numpy array of shape (n_samples, n_dimensions) that includes 
+        the ground-truth labels for all samples.
+        '''
+        ndim = 1
+        nsamples = len(self)
+        output = numpy.zeros((nsamples, 1))
+        for isample in range(len(self)):
+            output[isample] = self.df['AP/PA'][isample] == 'AP'
+        return output
+        
 class MIMICDataset(CXRDataset):
     def __init__(
             self,
@@ -229,6 +337,7 @@ class MIMICDataset(CXRDataset):
             include_lateral (bool): If True, include the lateral radiograph
                 views in the dataset. If False, include only frontal views.
         '''
+        print("Running MIMIC DATASET")
         self.transform = self._transforms[fold]
         self.path_to_images = "../data/MIMIC-CXR/"
         self.fold = fold
