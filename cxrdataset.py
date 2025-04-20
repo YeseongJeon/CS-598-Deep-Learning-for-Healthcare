@@ -20,18 +20,26 @@ def _nih_get_patient_id(path):
 
 
     image_path = path.split('/')[4]
-
     patient_id = image_path.split('_')[0]
 
     return patient_id
+def _mimic_get_patient_id(path):
+    
+    patient_id = path.split('/')[3].replace("p","")
 
+
+    return patient_id
 
 def _get_unique_patient_ids(dataframe,dataset):
     ids = list(dataframe.index)
     if dataset == "NIH":
         ids = [_nih_get_patient_id(i) for i in ids]
+    elif dataset == "MIMIC":
+
+        ids = [_mimic_get_patient_id(i) for i in ids]
     else:
         ids = [_get_patient_id(i) for i in ids]
+    
     ids = list(set(ids))
     ids.sort()
 
@@ -43,7 +51,11 @@ def grouped_split(dataframe, random_state=None, test_size=0.05,dataset = "NIH"):
     The dataframe must have an index that contains strings that may be processed
     by _get_patient_id to return the unique patient identifiers.
     '''
+
+    print(dataframe)
+
     groups = _get_unique_patient_ids(dataframe,dataset)
+
 
     print(f"Number of samples: {len(groups)}")
 
@@ -56,12 +68,15 @@ def grouped_split(dataframe, random_state=None, test_size=0.05,dataset = "NIH"):
 
     trainidx = []
     testidx = []
+
     for idx, row in dataframe.iterrows():
         if dataset == "NIH":
             patient_id = _nih_get_patient_id(idx)
+        elif dataset == "MIMIC":
+            patient_id = _mimic_get_patient_id(idx)
         else:
             patient_id = _get_patient_id(idx)
-        print(patient_id)
+        # print(patient_id)
         if patient_id in traingroups:
             trainidx.append(idx)
         elif patient_id in testgroups:
@@ -370,12 +385,12 @@ class MIMICDataset(CXRDataset):
         '''
         print("Running MIMIC DATASET")
         self.transform = self._transforms[fold]
-        self.path_to_images = "../data/MIMIC-CXR/"
+        self.path_to_images = "./data/MIMIC/"
         self.fold = fold
 
         # Load files containing labels, and perform train/valid split if necessary
         if fold == 'train' or fold == 'val':
-            trainvalpath = os.path.join(self.path_to_images, 'train.csv')
+            trainvalpath = os.path.join(self.path_to_images, 'mimic_train.csv')
             self.df = pandas.read_csv(trainvalpath)
             self.df.set_index("path", inplace=True)
             if not include_lateral:
@@ -383,13 +398,14 @@ class MIMICDataset(CXRDataset):
             train, val = grouped_split(
                     self.df,
                     random_state=random_state,
-                    test_size=0.05)
+                    test_size=0.05,
+                    dataset="MIMIC")
             if fold == 'train':
                 self.df = train
             else:
                 self.df = val
         elif fold == 'test':
-            testpath = os.path.join(self.path_to_images, 'valid.csv')
+            testpath = os.path.join(self.path_to_images, 'mimic_valid.csv')
             self.df = pandas.read_csv(testpath)
             self.df.set_index("path", inplace=True)
             if not include_lateral:

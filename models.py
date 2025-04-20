@@ -41,8 +41,8 @@ class Adversary(Module):
             torch.nn.Linear(n_hidden, n_sensitive),
         )
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(device)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.model.to(device)
     def forward(self, x):
         return torch.sigmoid(self.network(x))
         
@@ -302,6 +302,8 @@ class CXRAdvClassifier(object):
         Create a classifier for chest radiograph pathology.
         '''
         self.lossfunc = torch.nn.BCELoss()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     
     def predict(self, dataset, batch_size=16):
         '''
@@ -333,8 +335,12 @@ class CXRAdvClassifier(object):
         for ibatch, batch in enumerate(dataloader):
             inputs, labels, _, appa = batch
             # Move to GPUls
-            inputs = torch.autograd.Variable(inputs.cuda())
-            labels = torch.autograd.Variable(labels.cuda())
+
+            # inputs = torch.autograd.Variable(inputs.cuda())
+            # labels = torch.autograd.Variable(labels.cuda())
+
+            inputs = torch.autograd.Variable(inputs.to(self.device))
+            labels = torch.autograd.Variable(labels.to(self.device))
 
             true_labels = labels.cpu().data.numpy()
             # Size of current batch. Could be less than batch_size in final 
@@ -365,7 +371,8 @@ class CXRAdvClassifier(object):
         '''
         self.clf.train(False)
         score = torch.tensor(score)
-        score = torch.autograd.Variable(score).cuda().float().view(-1,1)
+        # score = torch.autograd.Variable(score).cuda().float().view(-1,1)
+        score = torch.autograd.Variable(score).to(self.device).float().view(-1,1)
         output = self.adv(score).cpu().detach().numpy()
         
         z_labels = numpy.zeros(len(dataset))
@@ -378,9 +385,13 @@ class CXRAdvClassifier(object):
         for ibatch, batch in enumerate(dataloader):
             inputs, labels, _, appa = batch
             # Move to GPU
-            inputs = torch.autograd.Variable(inputs.cuda())
-            labels = torch.autograd.Variable(labels.cuda())
-            appa = torch.autograd.Variable(appa.cuda())
+            # inputs = torch.autograd.Variable(inputs.cuda())
+            # labels = torch.autograd.Variable(labels.cuda())
+            # appa = torch.autograd.Variable(appa.cuda())
+
+            inputs = torch.autograd.Variable(inputs.to(self.device))
+            labels = torch.autograd.Variable(labels.to(self.device))
+            appa = torch.autograd.Variable(appa.to(self.device))
             
             true_z = appa.cpu().numpy()
             # Size of current batch. Could be less than batch_size in final 
@@ -401,9 +412,14 @@ class CXRAdvClassifier(object):
                             lam = 1.):
         self.clf.train(False)
         for image, label, _, appa in tqdm(train_dataloader):
-            image = torch.autograd.Variable(image).cuda()
-            label = torch.autograd.Variable(label).cuda()
-            appa = torch.autograd.Variable(appa).cuda().float()
+            # image = torch.autograd.Variable(image).cuda()
+            # label = torch.autograd.Variable(label).cuda()
+            # appa = torch.autograd.Variable(appa).cuda().float()
+
+
+            mage = torch.autograd.Variable(image).to(self.device)
+            label = torch.autograd.Variable(label).to(self.device)
+            appa = torch.autograd.Variable(appa).to(self.device).float()
             p_y = self.clf(image).detach()
             p_y_pneumo = p_y[:,pneumo_index].view(-1,1)
             self.adv.zero_grad()
@@ -441,9 +457,15 @@ class CXRAdvClassifier(object):
 
                 # Transfer inputs (images) and labels (arrays of ints) to 
                 # GPU
-                inputs = torch.autograd.Variable(inputs.cuda())
-                labels = torch.autograd.Variable(labels.cuda()).float()
-                appa = torch.autograd.Variable(appa.cuda()).float()
+                # inputs = torch.autograd.Variable(inputs.cuda())
+                # labels = torch.autograd.Variable(labels.cuda()).float()
+                # appa = torch.autograd.Variable(appa.cuda()).float()
+
+                inputs = torch.autograd.Variable(inputs.to(self.device))
+                labels = torch.autograd.Variable(labels.to(self.device)).float()
+                appa = torch.autograd.Variable(appa.to(self.device)).float()
+
+
                 outputs = self.clf(inputs)
 
                 # Calculate the loss
@@ -465,10 +487,13 @@ class CXRAdvClassifier(object):
         # Train adversary
         self.clf.train(False)
         for image, label, _, appa in tqdm(train_dataloader):
+            # image = torch.autograd.Variable(image).cuda()
+            # label = torch.autograd.Variable(label).cuda()
+            # appa = torch.autograd.Variable(appa).cuda().float()
             
-            image = torch.autograd.Variable(image).cuda()
-            label = torch.autograd.Variable(label).cuda()
-            appa = torch.autograd.Variable(appa).cuda().float()
+            image = torch.autograd.Variable(image).to(self.device)
+            label = torch.autograd.Variable(label).to(self.device)
+            appa = torch.autograd.Variable(appa).to(self.device).float()
             
             p_y = self.clf(image)
             p_y_pneumo = p_y[:,pneumo_index].view(-1,1)
@@ -482,9 +507,14 @@ class CXRAdvClassifier(object):
         self.clf.train(True)
         for image, label, _, appa in train_dataloader:
             pass
-        image = torch.autograd.Variable(image).cuda()
-        label = torch.autograd.Variable(label).cuda().float()
-        appa = torch.autograd.Variable(appa).cuda().float()
+        # image = torch.autograd.Variable(image).cuda()
+        # label = torch.autograd.Variable(label).cuda().float()
+        # appa = torch.autograd.Variable(appa).cuda().float()
+
+        image = torch.autograd.Variable(image).to(self.device)
+        label = torch.autograd.Variable(label).to(self.device).float()
+        appa = torch.autograd.Variable(appa).to(self.device).float()
+
         p_y = self.clf(image)
         p_y_pneumo = p_y[:,pneumo_index].view(-1,1)
         p_z = self.adv(p_y_pneumo)
@@ -566,15 +596,17 @@ class CXRAdvClassifier(object):
         clf_optimizer_2 = self._get_optimizer(lr/10., self.weight_decay)
 
         # Put classifier on GPU
-        self.clf.cuda()
-        
+        # self.clf.cuda()
+
+        self.clf.to(self.device)
         # Build and pretrain the adversary
         self.adv = Adversary(1)
         adv_criterion = torch.nn.BCELoss(reduce=False)
         adv_optimizer = torch.optim.Adam(self.adv.parameters())
         # Put adversary on GPU
-        self.adv.cuda()
-        
+        # self.adv.cuda()
+        self.adv.to(self.device)
+
         pneumo_index = _find_index(train_dataset, 'pneumonia')
         
         if pretrained_classifier_path is not None:
