@@ -5,10 +5,12 @@ import sklearn.metrics
 import random
 
 from models import CXRClassifier, CXRAdvClassifier
-from cxrdataset import CheXpertDataset, MIMICDataset
+from cxrdataset import CheXpertDataset, MIMICDataset, NIHDataset
 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
+
 
 def _find_index(ds, desired_label):
     desired_index = None
@@ -83,10 +85,10 @@ def main():
     
     if args.dataset == 'MIMIC' and args.training =='Standard':
         _train_standard(MIMICDataset, 'mimic_standard_model.pkl', 'mimic_standard.log')
-    elif args.dataset == 'CheXpert' and args.training =='Standard':
-        _train_standard(CheXpertDataset, 'chexpert_standard_model.pkl', 'chexpert_standard.log')
-    elif args.dataset == 'CheXpert' and args.training =='Adversarial':
-        _train_adversarial(CheXpertDataset, 'chexpert_adversarial_model.pkl', 'chexpert_adversarial.log')
+    elif args.dataset == 'NIH' and args.training =='Standard':
+        _train_standard(NIHDataset, 'NIH_standard_model.pkl', 'NIH_standard.log')
+    elif args.dataset == 'NIH' and args.training =='Adversarial':
+        _train_adversarial(NIHDataset, 'NIH_adversarial_model.pkl', 'NIH_adversarial.log')
     elif args.dataset == 'MIMIC' and args.training =='Adversarial':
         print('MIMIC Lacks AP/PA labels, can not do adversarial training.')
     else:

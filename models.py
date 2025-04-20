@@ -15,6 +15,8 @@ import torch.nn.functional as F
 
 from tqdm import *
 
+
+
 def _find_index(ds, desired_label):
     desired_index = None
     for ilabel, label in enumerate(ds.labels):
@@ -39,6 +41,8 @@ class Adversary(Module):
             torch.nn.Linear(n_hidden, n_sensitive),
         )
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
     def forward(self, x):
         return torch.sigmoid(self.network(x))
         
@@ -49,6 +53,8 @@ class CXRClassifier(object):
         Create a classifier for chest radiograph pathology.
         '''
         self.lossfunc = torch.nn.BCELoss()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
     def train(self, 
               train_dataset, 
@@ -108,6 +114,7 @@ class CXRClassifier(object):
 
         # Build the model
         self.model = torchvision.models.densenet121(pretrained=True)
+        self.model.to(self.device)
         num_ftrs = self.model.classifier.in_features
         # Add a classification head; consists of standard dense layer with
         # sigmoid activation and one output node per pathology in train_dataset
@@ -116,7 +123,7 @@ class CXRClassifier(object):
                 torch.nn.Sigmoid())
 
         # Put model on GPU
-        self.model.cuda()
+        # self.model.cuda()
 
         # Define the optimizer. Use SGD with momentum and weight decay.
         optimizer = self._get_optimizer(lr, self.weight_decay)
@@ -145,10 +152,19 @@ class CXRClassifier(object):
 
                     # Transfer inputs (images) and labels (arrays of ints) to 
                     # GPU
-                    inputs = torch.autograd.Variable(inputs.cuda())
-                    labels = torch.autograd.Variable(labels.cuda()).float()
+                    # inputs = torch.autograd.Variable(inputs.cuda())
+                    # labels = torch.autograd.Variable(labels.cuda()).float()
+
+                    # if masked is not None:
+                    #         ds = torch.autograd.Variable(ds).cuda().float()
+
+                    inputs = torch.autograd.Variable(inputs.to(self.device))
+                    labels = torch.autograd.Variable(labels.to(self.device)).float()
                     if masked is not None:
-                        ds = torch.autograd.Variable(ds).cuda().float()
+                        ds = torch.autograd.Variable(ds).to(self.device).float()
+
+
+
                     outputs = self.model(inputs)
 
                     # Calculate the loss
@@ -255,8 +271,11 @@ class CXRClassifier(object):
         for ibatch, batch in enumerate(dataloader):
             inputs, labels, _, ds = batch
             # Move to GPU
-            inputs = torch.autograd.Variable(inputs.cuda())
-            labels = torch.autograd.Variable(labels.cuda())
+            # inputs = torch.autograd.Variable(inputs.cuda())
+            # labels = torch.autograd.Variable(labels.cuda())
+
+            inputs = torch.autograd.Variable(inputs.to(self.device))
+            labels = torch.autograd.Variable(labels.to(self.device))
 
             true_labels = labels.cpu().data.numpy()
             # Size of current batch. Could be less than batch_size in final 

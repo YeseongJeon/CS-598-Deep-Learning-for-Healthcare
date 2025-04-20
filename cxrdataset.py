@@ -16,20 +16,37 @@ std = [0.229, 0.224, 0.225]
 def _get_patient_id(path):
     return path.split('/')[2]
 
-def _get_unique_patient_ids(dataframe):
+def _nih_get_patient_id(path):
+
+
+    image_path = path.split('/')[4]
+
+    patient_id = image_path.split('_')[0]
+
+    return patient_id
+
+
+def _get_unique_patient_ids(dataframe,dataset):
     ids = list(dataframe.index)
-    ids = [_get_patient_id(i) for i in ids]
+    if dataset == "NIH":
+        ids = [_nih_get_patient_id(i) for i in ids]
+    else:
+        ids = [_get_patient_id(i) for i in ids]
     ids = list(set(ids))
     ids.sort()
+
     return ids
     
-def grouped_split(dataframe, random_state=None, test_size=0.05):
+def grouped_split(dataframe, random_state=None, test_size=0.05,dataset = "NIH"):
     '''
     Split a dataframe such that patients are disjoint in the resulting folds.
     The dataframe must have an index that contains strings that may be processed
     by _get_patient_id to return the unique patient identifiers.
     '''
-    groups = _get_unique_patient_ids(dataframe)
+    groups = _get_unique_patient_ids(dataframe,dataset)
+
+    print(f"Number of samples: {len(groups)}")
+
     traingroups, testgroups = sklearn.model_selection.train_test_split(
             groups,
             random_state=random_state,
@@ -40,11 +57,20 @@ def grouped_split(dataframe, random_state=None, test_size=0.05):
     trainidx = []
     testidx = []
     for idx, row in dataframe.iterrows():
-        patient_id = _get_patient_id(idx)
+        if dataset == "NIH":
+            patient_id = _nih_get_patient_id(idx)
+        else:
+            patient_id = _get_patient_id(idx)
+        print(patient_id)
         if patient_id in traingroups:
             trainidx.append(idx)
         elif patient_id in testgroups:
             testidx.append(idx)
+    num_trainids = len(trainidx)
+    num_testids = len(testidx)
+
+
+
     traindf = dataframe.loc[dataframe.index.isin(trainidx),:]
     testdf = dataframe.loc[dataframe.index.isin(testidx),:]
     return traindf, testdf
@@ -220,7 +246,7 @@ class NIHDataset(CXRDataset):
             include_lateral=False,
             random_state=30493):
         '''
-        Create a dataset of the NIH images for use in a PyTorch model.
+        Create a dataset of the CheXPert images for use in a PyTorch model.
 
         Args:
             fold (str): The shard of the CheXPert data that the dataset should
@@ -238,14 +264,14 @@ class NIHDataset(CXRDataset):
         '''
 
         self.transform = self._transforms[fold]
-        self.path_to_images = "../data/CheXpert/"
+        self.path_to_images = "data/NIH/"
         self.fold = fold
 
         # Load files containing labels, and perform train/valid split if necessary
         if fold == 'train' or fold == 'val':
             trainvalpath = os.path.join(
                     self.path_to_images, 
-                    'CheXpert-v1.0-small/train.csv')
+                    'nih_train.csv')
             self.df = pandas.read_csv(trainvalpath)
             self.df.set_index("Path", inplace=True)
             
@@ -263,7 +289,7 @@ class NIHDataset(CXRDataset):
         elif fold == 'test':
             testpath = os.path.join(
                     self.path_to_images, 
-                    'CheXpert-v1.0-small/valid.csv')
+                    'nih_valid.csv')
             self.df = pandas.read_csv(testpath)
             self.df.set_index("Path", inplace=True)
             if not include_lateral:
@@ -271,27 +297,31 @@ class NIHDataset(CXRDataset):
         else:
             raise ValueError("Invalid fold: {:s}".format(str(fold)))
             
-        self.labels = [
-            'Enlarged Cardiomediastinum',
-            'Cardiomegaly',
-            'Lung Opacity',
-            'Lung Lesion',
-            'Edema',
-            'Consolidation',
-            'Pneumonia',
-            'Atelectasis',
-            'Pneumothorax',
-            'Pleural Effusion',
-            'Pleural Other',
-            'Fracture',
-            'Support Devices']
+        self.labels = ['Edema', 
+                       'Fibrosis', 
+                       'Nodule', 
+                       'Infiltration', 
+                       'Pneumothorax', 
+                       'Pleural_Thickening', 
+                       'Pneumonia', 
+                       'Atelectasis', 
+                       'Mass', 
+                       'Cardiomegaly', 
+                       'Emphysema', 
+                       'Effusion', 
+                       'Hernia', 
+                       'Consolidation']
+
+
     
     def __getitem__(self, idx):
 
-        image = Image.open(
-            os.path.join(
-                self.path_to_images,
-                self.df.index[idx]))
+        # image = Image.open(
+        #     os.path.join(
+        #         self.path_to_images,
+        #         self.df.index[idx]))
+        image = Image.open(self.df.index[idx])
+
         image = image.convert('RGB')
 
         label = numpy.zeros(len(self.labels), dtype=int)
@@ -320,6 +350,7 @@ class NIHDataset(CXRDataset):
             output[isample] = self.df['AP/PA'][isample] == 'AP'
         return output
         
+
 class MIMICDataset(CXRDataset):
     def __init__(
             self,
