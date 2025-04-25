@@ -7,14 +7,14 @@ import numpy
 import pandas
 import torch
 import torchvision
-
+from torchvision.models.densenet import DenseNet  # <--- THIS is the real class
+import torch.serialization
 import sklearn
 
 from torch.nn import Module
 import torch.nn.functional as F
 
 from tqdm import *
-
 
 
 def _find_index(ds, desired_label):
@@ -27,6 +27,7 @@ def _find_index(ds, desired_label):
         return desired_index
     else:
         raise ValueError("Label {:s} not found.".format(desired_label))
+
 
 class Adversary(Module):
     def __init__(self, n_sensitive, n_hidden=32):
@@ -41,26 +42,30 @@ class Adversary(Module):
             torch.nn.Linear(n_hidden, n_sensitive),
         )
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         # self.model.to(device)
+
     def forward(self, x):
         return torch.sigmoid(self.network(x))
-        
+
+
 class CXRClassifier(object):
     'A classifier for various pathologies found in chest radiographs'
+
     def __init__(self):
         '''
         Create a classifier for chest radiograph pathology.
         '''
         self.lossfunc = torch.nn.BCELoss()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
 
-
-    def train(self, 
-              train_dataset, 
-              val_dataset, 
-              max_epochs=100, 
-              lr=0.01, 
+    def train(self,
+              train_dataset,
+              val_dataset,
+              max_epochs=100,
+              lr=0.01,
               weight_decay=1e-4,
               batch_size=16,
               early_stopping_rounds=3,
@@ -72,7 +77,7 @@ class CXRClassifier(object):
         Train the classifier to predict the labels in the specified dataset.
         Training will start from the weights in a densenet-121 model pretrained
         on imagenet, as provided by torchvision.
-        
+
         Args:
             train_dataset: An instance of MIMICDataset or 
                 CheXpertDataset. Used for training neural network.
@@ -99,58 +104,59 @@ class CXRClassifier(object):
         # Create torch DataLoaders from the training and validation datasets.
         # Necessary for batching and shuffling data.
         train_dataloader = torch.utils.data.DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=True,
-                num_workers=8)
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=8)
         val_dataloader = torch.utils.data.DataLoader(
-                val_dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=8)
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=8)
         dataloaders = {
-                'train': train_dataloader,
-                'val': val_dataloader}
+            'train': train_dataloader,
+            'val': val_dataloader}
 
         # Build the model
         self.model = torchvision.models.densenet121(pretrained=True)
-        self.model.to(self.device)
         num_ftrs = self.model.classifier.in_features
         # Add a classification head; consists of standard dense layer with
         # sigmoid activation and one output node per pathology in train_dataset
         self.model.classifier = torch.nn.Sequential(
-                torch.nn.Linear(num_ftrs, len(train_dataset.labels)), 
-                torch.nn.Sigmoid())
+            torch.nn.Linear(num_ftrs, len(train_dataset.labels)),
+            torch.nn.Sigmoid())
+
+        self.model.to(self.device)
 
         # Put model on GPU
         # self.model.cuda()
 
         # Define the optimizer. Use SGD with momentum and weight decay.
         optimizer = self._get_optimizer(lr, self.weight_decay)
-        best_loss = None 
-        best_epoch = None 
+        best_loss = None
+        best_epoch = None
 
         # Begin training. Iterate over each epoch to (i) optimize network and
         # (ii) calculate validation loss.
         for i_epoch in range(max_epochs):
             print("-------- Epoch {:03d} --------".format(i_epoch))
-            
+
             for phase in ['train', 'val']:
                 if phase == 'train':
                     self.model.train(True)
                 else:
                     self.model.train(False)
 
-                # Iterate over each batch of data; loss holds a 
+                # Iterate over each batch of data; loss holds a
                 # running sum of the loss from each batch
                 loss = 0
                 for batch in tqdm(dataloaders[phase]):
                     inputs, labels, _, ds = batch
-                    # batch size may differ from batch_size for the last  
+                    # batch size may differ from batch_size for the last
                     # batch in an epoch
                     current_batch_size = inputs.shape[0]
 
-                    # Transfer inputs (images) and labels (arrays of ints) to 
+                    # Transfer inputs (images) and labels (arrays of ints) to
                     # GPU
                     # inputs = torch.autograd.Variable(inputs.cuda())
                     # labels = torch.autograd.Variable(labels.cuda()).float()
@@ -159,11 +165,11 @@ class CXRClassifier(object):
                     #         ds = torch.autograd.Variable(ds).cuda().float()
 
                     inputs = torch.autograd.Variable(inputs.to(self.device))
-                    labels = torch.autograd.Variable(labels.to(self.device)).float()
+                    labels = torch.autograd.Variable(
+                        labels.to(self.device)).float()
                     if masked is not None:
-                        ds = torch.autograd.Variable(ds).to(self.device).float()
-
-
+                        ds = torch.autograd.Variable(
+                            ds).to(self.device).float()
 
                     outputs = self.model(inputs)
 
@@ -178,7 +184,8 @@ class CXRClassifier(object):
 
                     # Update the running sum of the loss
                     loss += batch_loss.data.item()*current_batch_size
-                dataset_size = len(val_dataset) if phase == 'val' else len(train_dataset)
+                dataset_size = len(
+                    val_dataset) if phase == 'val' else len(train_dataset)
                 loss /= dataset_size
                 if phase == 'train':
                     trainloss = loss
@@ -192,13 +199,13 @@ class CXRClassifier(object):
                         best_epoch = i_epoch
                         best_loss = valloss
                         self._checkpoint(i_epoch, valloss)
-                    # If the validation loss has not improved, decay the 
+                    # If the validation loss has not improved, decay the
                     # learning rate
                     else:
                         self.lr /= 10
                         optimizer = self._get_optimizer(
-                                 self.lr, 
-                                 self.weight_decay)
+                            self.lr,
+                            self.weight_decay)
 
             # Write information on this epoch to a log.
             logstr = "Epoch {:03d}: ".format(i_epoch) +\
@@ -226,19 +233,25 @@ class CXRClassifier(object):
                  'best_loss': valloss,
                  'epoch': epoch,
                  'rng_state': torch.get_rng_state(),
-                 'LR': self.lr }
+                 'LR': self.lr}
         torch.save(state, self.checkpoint_path)
 
     def _get_optimizer(self, lr, weight_decay):
         opt = torch.optim.SGD(
-                filter(lambda p: p.requires_grad, self.model.parameters()),
-                lr=lr,
-                momentum=0.9,
-                weight_decay=weight_decay)
+            filter(lambda p: p.requires_grad, self.model.parameters()),
+            lr=lr,
+            momentum=0.9,
+            weight_decay=weight_decay)
         return opt
 
     def load_checkpoint(self, path):
-        self.model = torch.load(path)['model']
+
+        torch.serialization.add_safe_globals(
+            {'torchvision.models.densenet.DenseNet': DenseNet})
+
+    # Explicitly set weights_only=False
+        checkpoint = torch.load(path, weights_only=False)
+        self.model = checkpoint['model']
 
     def predict(self, dataset, batch_size=16):
         '''
@@ -258,10 +271,10 @@ class CXRClassifier(object):
 
         # Build a dataloader to batch predictions
         dataloader = torch.utils.data.DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=8)
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=8)
         pred_df = pandas.DataFrame(columns=["path"])
         true_df = pandas.DataFrame(columns=["path"])
 
@@ -278,7 +291,7 @@ class CXRClassifier(object):
             labels = torch.autograd.Variable(labels.to(self.device))
 
             true_labels = labels.cpu().data.numpy()
-            # Size of current batch. Could be less than batch_size in final 
+            # Size of current batch. Could be less than batch_size in final
             # batch
             current_batch_size = true_labels.shape[0]
 
@@ -291,20 +304,22 @@ class CXRClassifier(object):
                     output[batch_size*ibatch + isample, ilabel] = \
                         probs[isample, ilabel]
         return output
-        
+
+
 class CXRAdvClassifier(object):
     '''A CXR classifier f(X) that is independent of AP/PA View.
     Based on "Learning to Pivot with Adversarial Networks" (Louppe et al. 2016). 
     Code also inspired by PyTorch implementation found on
     https://github.com/equialgo/fairness-in-ml/blob/master/fairness-in-torch.ipynb'''
+
     def __init__(self):
         '''
         Create a classifier for chest radiograph pathology.
         '''
         self.lossfunc = torch.nn.BCELoss()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
 
-    
     def predict(self, dataset, batch_size=16):
         '''
         Predict the labels of the images in 'dataset'. Outputs indicate the
@@ -322,10 +337,10 @@ class CXRAdvClassifier(object):
 
         # Build a dataloader to batch predictions
         dataloader = torch.utils.data.DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=8)
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=8)
         pred_df = pandas.DataFrame(columns=["path"])
         true_df = pandas.DataFrame(columns=["path"])
 
@@ -343,7 +358,7 @@ class CXRAdvClassifier(object):
             labels = torch.autograd.Variable(labels.to(self.device))
 
             true_labels = labels.cpu().data.numpy()
-            # Size of current batch. Could be less than batch_size in final 
+            # Size of current batch. Could be less than batch_size in final
             # batch
             current_batch_size = true_labels.shape[0]
 
@@ -356,7 +371,7 @@ class CXRAdvClassifier(object):
                     output[batch_size*ibatch + isample, ilabel] = \
                         probs[isample, ilabel]
         return output
-    
+
     def predict_nuisance(self, dataset, score, batch_size=16):
         '''
         Adversary's predictions for nuisance/protected class using
@@ -372,15 +387,16 @@ class CXRAdvClassifier(object):
         self.clf.train(False)
         score = torch.tensor(score)
         # score = torch.autograd.Variable(score).cuda().float().view(-1,1)
-        score = torch.autograd.Variable(score).to(self.device).float().view(-1,1)
+        score = torch.autograd.Variable(score).to(
+            self.device).float().view(-1, 1)
         output = self.adv(score).cpu().detach().numpy()
-        
+
         z_labels = numpy.zeros(len(dataset))
         dataloader = torch.utils.data.DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=8)
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=8)
         # Iterate over the batches
         for ibatch, batch in enumerate(dataloader):
             inputs, labels, _, appa = batch
@@ -392,45 +408,46 @@ class CXRAdvClassifier(object):
             inputs = torch.autograd.Variable(inputs.to(self.device))
             labels = torch.autograd.Variable(labels.to(self.device))
             appa = torch.autograd.Variable(appa.to(self.device))
-            
+
             true_z = appa.cpu().numpy()
-            # Size of current batch. Could be less than batch_size in final 
+            # Size of current batch. Could be less than batch_size in final
             # batch
             current_batch_size = true_z.shape[0]
-            
+
             for isample in range(0, current_batch_size):
                 z_labels[batch_size*ibatch + isample] = true_z[isample]
-        
-        
+
         return output, z_labels
-    
+
     def _pretrain_adversary(self,
                             train_dataloader,
                             optimizer,
                             criterion,
                             pneumo_index,
-                            lam = 1.):
+                            lam=1.):
         self.clf.train(False)
         for image, label, _, appa in tqdm(train_dataloader):
             # image = torch.autograd.Variable(image).cuda()
             # label = torch.autograd.Variable(label).cuda()
             # appa = torch.autograd.Variable(appa).cuda().float()
 
-
-            mage = torch.autograd.Variable(image).to(self.device)
+            image = torch.autograd.Variable(image).to(self.device)
             label = torch.autograd.Variable(label).to(self.device)
             appa = torch.autograd.Variable(appa).to(self.device).float()
+            image = image.to(self.device)
             p_y = self.clf(image).detach()
-            p_y_pneumo = p_y[:,pneumo_index].view(-1,1)
+            p_y_pneumo = p_y[:, pneumo_index].view(-1, 1)
             self.adv.zero_grad()
             p_z = self.adv(p_y_pneumo)
-            loss = (criterion(p_z, appa) * lam).mean()
+            # loss = (criterion(p_z, appa) * lam).mean()
+            loss = (criterion(p_z, appa.unsqueeze(1)) * lam).mean()
+
             loss.backward()
             optimizer.step()
-            
+
         return self.adv
-    
-    def _pretrain_classifier(self, 
+
+    def _pretrain_classifier(self,
                              train_dataset,
                              optimizer,
                              clf_pretrain_epochs=7,
@@ -439,32 +456,32 @@ class CXRAdvClassifier(object):
         # Create torch DataLoaders from the training and validation datasets.
         # Necessary for batching and shuffling data.
         train_dataloader = torch.utils.data.DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=True,
-                num_workers=8)
-        
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=8)
+
         for i_epoch in range(clf_pretrain_epochs):
             print("-- CLF Pretrain Epoch {:03d} --".format(i_epoch))
-            
+
             self.clf.train(True)
-                
+
             for batch in tqdm(train_dataloader):
                 inputs, labels, _, appa = batch
-                # batch size may differ from batch_size for the last  
+                # batch size may differ from batch_size for the last
                 # batch in an epoch
                 current_batch_size = inputs.shape[0]
 
-                # Transfer inputs (images) and labels (arrays of ints) to 
+                # Transfer inputs (images) and labels (arrays of ints) to
                 # GPU
                 # inputs = torch.autograd.Variable(inputs.cuda())
                 # labels = torch.autograd.Variable(labels.cuda()).float()
                 # appa = torch.autograd.Variable(appa.cuda()).float()
 
                 inputs = torch.autograd.Variable(inputs.to(self.device))
-                labels = torch.autograd.Variable(labels.to(self.device)).float()
+                labels = torch.autograd.Variable(
+                    labels.to(self.device)).float()
                 appa = torch.autograd.Variable(appa.to(self.device)).float()
-
 
                 outputs = self.clf(inputs)
 
@@ -475,7 +492,7 @@ class CXRAdvClassifier(object):
                 optimizer.step()
 
         return self.clf
-    
+
     def _batch_adversarial_train(self,
                                  train_dataloader,
                                  clf_criterion,
@@ -483,26 +500,29 @@ class CXRAdvClassifier(object):
                                  clf_optimizer,
                                  adv_optimizer,
                                  pneumo_index,
-                                 lam = 1.):
+                                 lam=0.5):
         # Train adversary
         self.clf.train(False)
         for image, label, _, appa in tqdm(train_dataloader):
             # image = torch.autograd.Variable(image).cuda()
             # label = torch.autograd.Variable(label).cuda()
             # appa = torch.autograd.Variable(appa).cuda().float()
-            
+
             image = torch.autograd.Variable(image).to(self.device)
             label = torch.autograd.Variable(label).to(self.device)
             appa = torch.autograd.Variable(appa).to(self.device).float()
-            
+
             p_y = self.clf(image)
-            p_y_pneumo = p_y[:,pneumo_index].view(-1,1)
+            p_y_pneumo = p_y[:, pneumo_index].view(-1, 1)
             self.adv.zero_grad()
             p_z = self.adv(p_y_pneumo)
-            loss_adv = (adv_criterion(p_z, appa) * lam).mean()
+            loss_adv = (adv_criterion(p_z, appa.unsqueeze(1)) * lam).mean()
+
+            # loss_adv = (adv_criterion(p_z, appa) * lam).mean()
+
             loss_adv.backward()
             adv_optimizer.step()
-            
+
         # Train classifier on single batch
         self.clf.train(True)
         for image, label, _, appa in train_dataloader:
@@ -516,22 +536,25 @@ class CXRAdvClassifier(object):
         appa = torch.autograd.Variable(appa).to(self.device).float()
 
         p_y = self.clf(image)
-        p_y_pneumo = p_y[:,pneumo_index].view(-1,1)
+        p_y_pneumo = p_y[:, pneumo_index].view(-1, 1)
         p_z = self.adv(p_y_pneumo)
         self.clf.zero_grad()
         p_z = self.adv(p_y_pneumo)
-        loss_adv = (adv_criterion(p_z, appa) * lam).mean()
-        clf_loss = clf_criterion(p_y, label) - (adv_criterion(self.adv(p_y_pneumo), appa) * lam).mean()
+        loss_adv = (adv_criterion(p_z, appa.unsqueeze(1)) * lam).mean()
+        # loss_adv = (adv_criterion(p_z, appa) * lam).mean()
+        clf_loss = clf_criterion(
+            p_y, label) - (adv_criterion(self.adv(p_y_pneumo), appa.unsqueeze(1)) * lam).mean()
+        # clf_loss = clf_criterion(p_y, label) - (adv_criterion(self.adv(p_y_pneumo), appa) * lam).mean()
         clf_loss.backward()
         clf_optimizer.step()
-        
+
         return self.clf, self.adv, clf_loss, loss_adv
 
-    def train(self, 
-              train_dataset, 
-              val_dataset, 
-              max_epochs=500, 
-              lr=0.01, 
+    def train(self,
+              train_dataset,
+              val_dataset,
+              max_epochs=500,
+              lr=0.01,
               weight_decay=1e-4,
               batch_size=16,
               logpath=None,
@@ -542,7 +565,7 @@ class CXRAdvClassifier(object):
         Train the classifier to predict the labels in the specified dataset.
         Training will start from the weights in a densenet-121 model pretrained
         on imagenet, as provided by torchvision.
-        
+
         Args:
             train_dataset: An instance of ChestXray14Dataset, MIMICDataset, or 
                 CheXpertDataset. Used for training neural network.
@@ -568,18 +591,18 @@ class CXRAdvClassifier(object):
         # Create torch DataLoaders from the training and validation datasets.
         # Necessary for batching and shuffling data.
         train_dataloader = torch.utils.data.DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=True,
-                num_workers=8)
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=8)
         val_dataloader = torch.utils.data.DataLoader(
-                val_dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=8)
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=8)
         dataloaders = {
-                'train': train_dataloader,
-                'val': val_dataloader}
+            'train': train_dataloader,
+            'val': val_dataloader}
 
         # Build the classifier model
         # Note that pretraining has already been done on ImageNet
@@ -588,8 +611,8 @@ class CXRAdvClassifier(object):
         # Add a classification head; consists of standard dense layer with
         # sigmoid activation and one output node per pathology in train_dataset
         self.clf.classifier = torch.nn.Sequential(
-                torch.nn.Linear(num_ftrs, len(train_dataset.labels)), 
-                torch.nn.Sigmoid())
+            torch.nn.Linear(num_ftrs, len(train_dataset.labels)),
+            torch.nn.Sigmoid())
         # Define the optimizer. Use SGD with momentum and weight decay.
         clf_criterion = torch.nn.BCELoss()
         clf_optimizer = self._get_optimizer(lr, self.weight_decay)
@@ -608,17 +631,17 @@ class CXRAdvClassifier(object):
         self.adv.to(self.device)
 
         pneumo_index = _find_index(train_dataset, 'pneumonia')
-        
+
         if pretrained_classifier_path is not None:
             print('--Loading classifier from {}----'.format(pretrained_classifier_path))
             self.clf = torch.load(pretrained_classifier_path)['model']
-        
+
         else:
             N_CLF_EPOCHS = 7
             print('--Pretraining classifier----')
-            self._pretrain_classifier(train_dataset,clf_optimizer,
+            self._pretrain_classifier(train_dataset, clf_optimizer,
                                       clf_pretrain_epochs=N_CLF_EPOCHS)
-        
+
         N_ADV_EPOCHS = 1
         print('--Pretraining adversary----')
         for pretrain_epoch in range(N_ADV_EPOCHS):
@@ -627,9 +650,9 @@ class CXRAdvClassifier(object):
                                                 adv_optimizer,
                                                 adv_criterion,
                                                 pneumo_index,
-                                                lam = 1.)
-            
-        best_loss = None 
+                                                lam=1.)
+
+        best_loss = None
         best_epoch = None
         best_val_auroc_clf = None
 
@@ -638,42 +661,44 @@ class CXRAdvClassifier(object):
         print('--Begin joint adverarial optimization----')
         for i_epoch in range(max_epochs):
             print("-------- Batch 'Epoch' {:03d} --------".format(i_epoch))
-            
+
             self.clf, self.adv, clf_loss, loss_adv = self._batch_adversarial_train(train_dataloader,
-                                                                                   clf_criterion, 
+                                                                                   clf_criterion,
                                                                                    adv_criterion,
-                                                                                   clf_optimizer_2, 
+                                                                                   clf_optimizer_2,
                                                                                    adv_optimizer,
                                                                                    pneumo_index,
-                                                                                   lam = 1.)
-            
-            ## print training loss, val loss, training adv auroc, val adv auroc
+                                                                                   lam=1.)
+
+            # print training loss, val loss, training adv auroc, val adv auroc
             # get val loss here
-            
+
             val_probs = self.predict(val_dataset)
             val_true = val_dataset.get_all_labels()
-            valloss = self.lossfunc(torch.tensor(val_true),torch.tensor(val_probs))
-            
-            adv_val_probs, adv_val_true = self.predict_nuisance(val_dataset,val_probs[:,pneumo_index])
-            
+            valloss = self.lossfunc(torch.tensor(
+                val_true), torch.tensor(val_probs))
+
+            adv_val_probs, adv_val_true = self.predict_nuisance(
+                val_dataset, val_probs[:, pneumo_index])
+
             val_auroc_adv = sklearn.metrics.roc_auc_score(
-                            adv_val_true,
-                            adv_val_probs)
+                adv_val_true,
+                adv_val_probs)
             val_auroc_clf = sklearn.metrics.roc_auc_score(
-                            val_true[:,pneumo_index],
-                            val_probs[:,pneumo_index])
-            
+                val_true[:, pneumo_index],
+                val_probs[:, pneumo_index])
+
             logstr = "Epoch {:03d}: ".format(i_epoch)                \
                      + "train clf loss {:08.4f},".format(clf_loss)    \
                 + "train adv loss {:08.4f},".format(loss_adv)    \
-                    + "val clf loss {:08.4f},".format(valloss)       \
-                        + "val_auroc_adv {:08.4f},".format(val_auroc_adv) \
-                        + "val_auroc_clf {:08.4f}".format(val_auroc_clf)
+                + "val clf loss {:08.4f},".format(valloss)       \
+                + "val_auroc_adv {:08.4f},".format(val_auroc_adv) \
+                + "val_auroc_clf {:08.4f}".format(val_auroc_clf)
             if not logpath is None:
                 with open(logpath, 'a') as logfile:
-                    logfile.write(logstr + '\n')      
+                    logfile.write(logstr + '\n')
             print(logstr)
-            
+
             if (val_auroc_adv <= 0.52 and val_auroc_adv >= 0.48) and (best_val_auroc_clf == None or val_auroc_clf > best_val_auroc_clf):
                 best_epoch = i_epoch
                 best_val_auroc_clf = val_auroc_clf
@@ -691,18 +716,18 @@ class CXRAdvClassifier(object):
                  'best_val_auroc_clf': valloss,
                  'epoch': epoch,
                  'rng_state': torch.get_rng_state(),
-                 'LR': self.lr }
+                 'LR': self.lr}
         torch.save(state, self.checkpoint_path)
 
     def _get_optimizer(self, lr, weight_decay):
         opt = torch.optim.SGD(
-                filter(lambda p: p.requires_grad, self.clf.parameters()),
-                lr=lr,
-                momentum=0.9,
-                weight_decay=weight_decay)
+            filter(lambda p: p.requires_grad, self.clf.parameters()),
+            lr=lr,
+            momentum=0.9,
+            weight_decay=weight_decay)
         return opt
 
     def load_checkpoint(self, path):
-        saved_dict = torch.load(path)
+        saved_dict = torch.load(path, weights_only=False)
         self.clf = saved_dict['clf']
         self.adv = saved_dict['adv']

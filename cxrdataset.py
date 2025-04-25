@@ -1,36 +1,42 @@
 #!/usr/bin/env python3
-import os 
+import os
 
 import numpy
 import torch
 import pandas
 import sklearn.model_selection
 from torchvision import transforms
-from PIL import Image
+from PIL import Image, ImageFile
 import random
+
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # use imagenet mean,std for normalization
 mean = [0.485, 0.456, 0.406]
 std = [0.229, 0.224, 0.225]
 
+
 def _get_patient_id(path):
     return path.split('/')[2]
 
-def _nih_get_patient_id(path):
 
+def _nih_get_patient_id(path):
 
     image_path = path.split('/')[4]
     patient_id = image_path.split('_')[0]
 
     return patient_id
-def _mimic_get_patient_id(path):
-    
-    patient_id = path.split('/')[3].replace("p","")
 
+
+def _mimic_get_patient_id(path):
+
+    patient_id = path.split('/')[0].replace("p", "")
 
     return patient_id
 
-def _get_unique_patient_ids(dataframe,dataset):
+
+def _get_unique_patient_ids(dataframe, dataset):
     ids = list(dataframe.index)
     if dataset == "NIH":
         ids = [_nih_get_patient_id(i) for i in ids]
@@ -39,13 +45,14 @@ def _get_unique_patient_ids(dataframe,dataset):
         ids = [_mimic_get_patient_id(i) for i in ids]
     else:
         ids = [_get_patient_id(i) for i in ids]
-    
+
     ids = list(set(ids))
     ids.sort()
 
     return ids
-    
-def grouped_split(dataframe, random_state=None, test_size=0.05,dataset = "NIH"):
+
+
+def grouped_split(dataframe, random_state=None, test_size=0.05, dataset="NIH"):
     '''
     Split a dataframe such that patients are disjoint in the resulting folds.
     The dataframe must have an index that contains strings that may be processed
@@ -54,15 +61,14 @@ def grouped_split(dataframe, random_state=None, test_size=0.05,dataset = "NIH"):
 
     print(dataframe)
 
-    groups = _get_unique_patient_ids(dataframe,dataset)
-
+    groups = _get_unique_patient_ids(dataframe, dataset)
 
     print(f"Number of samples: {len(groups)}")
 
     traingroups, testgroups = sklearn.model_selection.train_test_split(
-            groups,
-            random_state=random_state,
-            test_size=test_size)
+        groups,
+        random_state=random_state,
+        test_size=test_size)
     traingroups = set(traingroups)
     testgroups = set(testgroups)
 
@@ -84,11 +90,10 @@ def grouped_split(dataframe, random_state=None, test_size=0.05,dataset = "NIH"):
     num_trainids = len(trainidx)
     num_testids = len(testidx)
 
-
-
-    traindf = dataframe.loc[dataframe.index.isin(trainidx),:]
-    testdf = dataframe.loc[dataframe.index.isin(testidx),:]
+    traindf = dataframe.loc[dataframe.index.isin(trainidx), :]
+    testdf = dataframe.loc[dataframe.index.isin(testidx), :]
     return traindf, testdf
+
 
 class CXRDataset(torch.utils.data.Dataset):
     '''
@@ -125,7 +130,7 @@ class CXRDataset(torch.utils.data.Dataset):
         label = numpy.zeros(len(self.labels), dtype=int)
         for i in range(0, len(self.labels)):
             if self.labels[i] != "N/A":
-                if(self.df[self.labels[i].strip()].iloc[idx].astype('int') > 0):
+                if (self.df[self.labels[i].strip()].iloc[idx].astype('int') > 0):
                     label[i] = self.df[self.labels[i].strip()
                                        ].iloc[idx].astype('int')
 
@@ -145,7 +150,8 @@ class CXRDataset(torch.utils.data.Dataset):
         for isample in range(len(self)):
             output[isample] = self[isample][1]
         return output
-            
+
+
 class CheXpertDataset(CXRDataset):
     def __init__(
             self,
@@ -177,14 +183,14 @@ class CheXpertDataset(CXRDataset):
         # Load files containing labels, and perform train/valid split if necessary
         if fold == 'train' or fold == 'val':
             trainvalpath = os.path.join(
-                    self.path_to_images, 
-                    'CheXpert-v1.0-small/train.csv')
+                self.path_to_images,
+                'CheXpert-v1.0-small/train.csv')
             self.df = pandas.read_csv(trainvalpath)
             self.df.set_index("Path", inplace=True)
-            
+
             if not include_lateral:
                 self.df = self.df[self.df['Frontal/Lateral'] == 'Frontal']
-            
+
             train, val = grouped_split(
                 self.df,
                 random_state=random_state,
@@ -195,15 +201,15 @@ class CheXpertDataset(CXRDataset):
                 self.df = val
         elif fold == 'test':
             testpath = os.path.join(
-                    self.path_to_images, 
-                    'CheXpert-v1.0-small/valid.csv')
+                self.path_to_images,
+                'CheXpert-v1.0-small/valid.csv')
             self.df = pandas.read_csv(testpath)
             self.df.set_index("Path", inplace=True)
             if not include_lateral:
                 self.df = self.df[self.df['Frontal/Lateral'] == 'Frontal']
         else:
             raise ValueError("Invalid fold: {:s}".format(str(fold)))
-            
+
         self.labels = [
             'Enlarged Cardiomediastinum',
             'Cardiomegaly',
@@ -218,7 +224,7 @@ class CheXpertDataset(CXRDataset):
             'Pleural Other',
             'Fracture',
             'Support Devices']
-    
+
     def __getitem__(self, idx):
 
         image = Image.open(
@@ -230,7 +236,7 @@ class CheXpertDataset(CXRDataset):
         label = numpy.zeros(len(self.labels), dtype=int)
         for i in range(0, len(self.labels)):
             if self.labels[i] != "N/A":
-                if(self.df[self.labels[i].strip()].iloc[idx].astype('int') > 0):
+                if (self.df[self.labels[i].strip()].iloc[idx].astype('int') > 0):
                     label[i] = self.df[self.labels[i].strip()
                                        ].iloc[idx].astype('int')
 
@@ -240,7 +246,7 @@ class CheXpertDataset(CXRDataset):
         appa = self.df['AP/PA'][idx] == 'AP'
 
         return (image, label, self.df.index[idx], appa)
-    
+
     def get_all_view_labels(self):
         '''
         Return a numpy array of shape (n_samples, n_dimensions) that includes 
@@ -252,7 +258,7 @@ class CheXpertDataset(CXRDataset):
         for isample in range(len(self)):
             output[isample] = self.df['AP/PA'][isample] == 'AP'
         return output
-        
+
 
 class NIHDataset(CXRDataset):
     def __init__(
@@ -285,14 +291,14 @@ class NIHDataset(CXRDataset):
         # Load files containing labels, and perform train/valid split if necessary
         if fold == 'train' or fold == 'val':
             trainvalpath = os.path.join(
-                    self.path_to_images, 
-                    'nih_train.csv')
+                self.path_to_images,
+                'nih_train.csv')
             self.df = pandas.read_csv(trainvalpath)
             self.df.set_index("Path", inplace=True)
-            
+
             if not include_lateral:
                 self.df = self.df[self.df['Frontal/Lateral'] == 'Frontal']
-            
+
             train, val = grouped_split(
                 self.df,
                 random_state=random_state,
@@ -303,32 +309,30 @@ class NIHDataset(CXRDataset):
                 self.df = val
         elif fold == 'test':
             testpath = os.path.join(
-                    self.path_to_images, 
-                    'nih_valid.csv')
+                self.path_to_images,
+                'nih_valid.csv')
             self.df = pandas.read_csv(testpath)
             self.df.set_index("Path", inplace=True)
             if not include_lateral:
                 self.df = self.df[self.df['Frontal/Lateral'] == 'Frontal']
         else:
             raise ValueError("Invalid fold: {:s}".format(str(fold)))
-            
-        self.labels = ['Edema', 
-                       'Fibrosis', 
-                       'Nodule', 
-                       'Infiltration', 
-                       'Pneumothorax', 
-                       'Pleural_Thickening', 
-                       'Pneumonia', 
-                       'Atelectasis', 
-                       'Mass', 
-                       'Cardiomegaly', 
-                       'Emphysema', 
-                       'Effusion', 
-                       'Hernia', 
+
+        self.labels = ['Edema',
+                       'Fibrosis',
+                       'Nodule',
+                       'Infiltration',
+                       'Pneumothorax',
+                       'Pleural_Thickening',
+                       'Pneumonia',
+                       'Atelectasis',
+                       'Mass',
+                       'Cardiomegaly',
+                       'Emphysema',
+                       'Effusion',
+                       'Hernia',
                        'Consolidation']
 
-
-    
     def __getitem__(self, idx):
 
         # image = Image.open(
@@ -342,7 +346,7 @@ class NIHDataset(CXRDataset):
         label = numpy.zeros(len(self.labels), dtype=int)
         for i in range(0, len(self.labels)):
             if self.labels[i] != "N/A":
-                if(self.df[self.labels[i].strip()].iloc[idx].astype('int') > 0):
+                if (self.df[self.labels[i].strip()].iloc[idx].astype('int') > 0):
                     label[i] = self.df[self.labels[i].strip()
                                        ].iloc[idx].astype('int')
 
@@ -352,7 +356,7 @@ class NIHDataset(CXRDataset):
         appa = self.df['AP/PA'][idx] == 'AP'
 
         return (image, label, self.df.index[idx], appa)
-    
+
     def get_all_view_labels(self):
         '''
         Return a numpy array of shape (n_samples, n_dimensions) that includes 
@@ -364,7 +368,7 @@ class NIHDataset(CXRDataset):
         for isample in range(len(self)):
             output[isample] = self.df['AP/PA'][isample] == 'AP'
         return output
-        
+
 
 class MIMICDataset(CXRDataset):
     def __init__(
@@ -394,12 +398,12 @@ class MIMICDataset(CXRDataset):
             self.df = pandas.read_csv(trainvalpath)
             self.df.set_index("path", inplace=True)
             if not include_lateral:
-                self.df = self.df[self.df['view'] == 'frontal']
+                self.df = self.df[self.df['ViewPosition'].isin(['AP', 'PA'])]
             train, val = grouped_split(
-                    self.df,
-                    random_state=random_state,
-                    test_size=0.05,
-                    dataset="MIMIC")
+                self.df,
+                random_state=random_state,
+                test_size=0.05,
+                dataset="MIMIC")
             if fold == 'train':
                 self.df = train
             else:
@@ -409,7 +413,7 @@ class MIMICDataset(CXRDataset):
             self.df = pandas.read_csv(testpath)
             self.df.set_index("path", inplace=True)
             if not include_lateral:
-                self.df = self.df[self.df['view'] == 'frontal']
+                self.df = self.df[self.df['ViewPosition'].isin(['AP', 'PA'])]
         else:
             raise ValueError("Invalid fold: {:s}".format(str(fold)))
 
@@ -427,3 +431,34 @@ class MIMICDataset(CXRDataset):
             'Pleural Other',
             'Fracture',
             'Support Devices']
+
+    def __getitem__(self, idx):
+        image = Image.open(
+            os.path.join(
+                self.path_to_images,
+                self.df.index[idx]))
+        image = image.convert('RGB')
+
+        label = numpy.zeros(len(self.labels), dtype=int)
+        for i in range(0, len(self.labels)):
+            if self.labels[i] != "N/A":
+                if (self.df[self.labels[i].strip()].iloc[idx].astype('int') > 0):
+                    label[i] = self.df[self.labels[i].strip()
+                                       ].iloc[idx].astype('int')
+
+        if self.transform:
+            image = self.transform(image)
+        appa = self.df['ViewPosition'].iloc[idx] == 'AP'
+        return (image, label, self.df.index[idx], appa)
+
+    def get_all_view_labels(self):
+        '''
+        Return a numpy array of shape (n_samples, 1) for AP/PA labels.
+        '''
+        ndim = 1
+        nsamples = len(self)
+        output = numpy.zeros((nsamples, 1))
+        for isample in range(len(self)):
+            view_val = self.df['ViewPosition'].iloc[isample]
+            output[isample] = view_val == 'AP'
+        return output
