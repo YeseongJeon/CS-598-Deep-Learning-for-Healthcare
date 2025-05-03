@@ -50,6 +50,38 @@ class Adversary(Module):
         return torch.sigmoid(self.network(x))
 
 
+class SmartAdversary(Module):
+    # Extension: Instead of using standard Adversarial classifier from the paper, we created a smarter version with:
+    #   (1) - BatchNormalization
+    #   (2) - Dropout
+    def __init__(self, n_sensitive, n_hidden=128, dropout_rate=0.3):
+        super(SmartAdversary, self).__init__()
+        self.network = torch.nn.Sequential(
+            torch.nn.Linear(1, n_hidden),
+            torch.nn.ReLU(),
+            torch.nn.BatchNorm1d(n_hidden),
+            torch.nn.Dropout(dropout_rate),
+
+            torch.nn.Linear(n_hidden, n_hidden),
+            torch.nn.ReLU(),
+            torch.nn.BatchNorm1d(n_hidden),
+            torch.nn.Dropout(dropout_rate),
+
+            torch.nn.Linear(n_hidden, n_hidden),
+            torch.nn.ReLU(),
+            torch.nn.BatchNorm1d(n_hidden),
+            torch.nn.Dropout(dropout_rate),
+
+            torch.nn.Linear(n_hidden, n_sensitive)
+        )
+
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
+
+    def forward(self, x):
+        return torch.sigmoid(self.network(x))
+
+
 class CXRClassifier(object):
     'A classifier for various pathologies found in chest radiographs'
 
@@ -312,13 +344,14 @@ class CXRAdvClassifier(object):
     Code also inspired by PyTorch implementation found on
     https://github.com/equialgo/fairness-in-ml/blob/master/fairness-in-torch.ipynb'''
 
-    def __init__(self):
+    def __init__(self, adv_model = "standard"):
         '''
         Create a classifier for chest radiograph pathology.
         '''
         self.lossfunc = torch.nn.BCELoss()
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
+        self.adv_model = adv_model
 
     def predict(self, dataset, batch_size=16):
         '''
@@ -623,7 +656,14 @@ class CXRAdvClassifier(object):
 
         self.clf.to(self.device)
         # Build and pretrain the adversary
-        self.adv = Adversary(1)
+        # self.adv = Adversary(1)
+
+        if self.adv_model == "smart":
+            print('--Using Smart Adversary--')
+            self.adv = SmartAdversary(1)
+        else:
+            print('--Using Standard Adversary--')
+            self.adv = Adversary(1)
         adv_criterion = torch.nn.BCELoss(reduce=False)
         adv_optimizer = torch.optim.Adam(self.adv.parameters())
         # Put adversary on GPU

@@ -75,6 +75,38 @@ def _train_adversarial(datasetclass, checkpoint_path, logpath):
         probs_pneumonia)
     print("area under ROC curve of pneumonia: {:.04f}".format(auroc))
 
+def _train_advanced_adversarial(datasetclass, checkpoint_path, logpath):
+    """
+    Extension of standard adversarial model from the paper to use a more robust adversarial model.
+    """
+    trainds = datasetclass(fold='train')
+    valds = datasetclass(fold='val')
+    testds = datasetclass(fold='test')
+
+    # Initialize CXRAdvClassifier with adv_model='smart'
+    classifier = CXRAdvClassifier(adv_model="smart")
+    
+    classifier.train(trainds,
+                     valds,
+                     lr=0.01,
+                     weight_decay=1e-4,
+                     logpath=logpath,
+                     checkpoint_path=checkpoint_path,
+                     verbose=True)
+    
+    probs = classifier.predict(testds)
+    true = testds.get_all_labels()
+
+    # find the label index corresponding to pneumonia
+    pneumonia_index = _find_index(testds, 'pneumonia')
+    probs_pneumonia = probs[:, pneumonia_index]
+    true_pneumonia = true[:, pneumonia_index]
+    auroc = sklearn.metrics.roc_auc_score(
+        true_pneumonia,
+        probs_pneumonia)
+    
+    print("Area under ROC curve of pneumonia (Smart Adversary): {:.04f}".format(auroc))
+
 
 def main():
     print("running train")
@@ -96,6 +128,12 @@ def main():
     elif args.dataset == 'MIMIC' and args.training == 'Adversarial':
         _train_adversarial(
             MIMICDataset, 'mimic_adversarial_model.pkl', 'mimic_adversarial.log')
+        
+    elif args.dataset == 'MIMIC' and args.training == 'Advanced':
+        _train_advanced_adversarial(MIMICDataset, 'mimic_advSMART_model.pkl', 'mimic_advSMART.log')
+    elif args.dataset == 'NIH' and args.training == 'Advanced':
+        _train_advanced_adversarial(NIHDataset, 'NIH_advSMART_model.pkl', 'NIH_advSMART.log')
+        
     else:
         print('arguments not understood')
 

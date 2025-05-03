@@ -62,6 +62,22 @@ def test_adversarial(chkpt_pth):
     print("MIMIC area under ROC curve of pneumonia: {:.04f}".format(
         auroc_MIMIC))
 
+def test_advanced_adversarial(chkpt_pth):
+    """
+    Testing function for the advanced adversarial model
+    """
+    testds_MIMIC = MIMICDataset(fold='test')
+    testds_NIH = NIHDataset(fold='test')
+
+    # Load CXRAdvClassifier with smart adversary
+    classifier = CXRAdvClassifier(adv_model="smart")
+    classifier.load_checkpoint(chkpt_pth)
+
+    auroc_MIMIC = calc_pneumonia_auroc(classifier, testds_MIMIC)
+    auroc_NIH = calc_pneumonia_auroc(classifier, testds_NIH)
+
+    print("NIH area under ROC curve of pneumonia (Smart Adversary): {:.04f}".format(auroc_NIH))
+    print("MIMIC area under ROC curve of pneumonia (Smart Adversary): {:.04f}".format(auroc_MIMIC))
 
 def main():
     parser = argparse.ArgumentParser()
@@ -74,6 +90,8 @@ def main():
         test_standard(args.model_path)
     elif args.training == 'Adversarial':
         test_adversarial(args.model_path)
+    elif args.training == 'Advanced':
+        test_advanced_adversarial(args.model_path)
     else:
         print('Training argument must be either "Standard" or "Adversarial"')
 
