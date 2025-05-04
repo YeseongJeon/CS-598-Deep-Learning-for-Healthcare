@@ -17,24 +17,14 @@ The saved .pkl model files and the training logs can be found in the saved_model
 
 Packages can be found in requirements.txt
 
-## Initial usage:
+## Usage:
 
-Before running, you need set up a `./data` directory containing the [NIH](https://www.kaggle.com/datasets/nih-chest-xrays/data?select=Data_Entry_2017.csv) and [MIMIC](https://physionet.org/content/mimic-cxr-jpg/2.0.0/) datasets. We set up our file structure with like this:
+## Data Folder Configuration
+Before running, you need configure the `./data` directory. You will need to download the [NIH](https://www.kaggle.com/datasets/nih-chest-xrays/data?select=Data_Entry_2017.csv) and [MIMIC](https://physionet.org/content/mimic-cxr-jpg/2.0.0/) datasets and organize the file structure like this:
 
-data/
-├── MIMIC/
-│   ├── p10xxxx/
-│   │   └── s504142676.../
-│   │       └── image.jpg
-│   ├── p10xxx1.../
-│   ├── mimic_train.csv
-│   └── mimic_valid.csv
-├── NIH/
-│   ├── images_001/
-│   │   ├── 000000001_001.png
-│   │   └── 000000001_002.png
-│   ├── nih_train.csv
-│   └── nih_valid.csv
+<pre> <code> data/ ├── MIMIC/ │ ├── p10xxxx/ │ │ └── s504142676.../ │ │ └── image.jpg │ ├── p10xxx1.../ │ ├── mimic_train.csv │ └── mimic_valid.csv ├── NIH/ │ ├── images_001/ │ │ ├── 000000001_001.png │ │ └── 000000001_002.png │ ├── nih_train.csv │ └── nih_valid.csv </code> </pre>
+
+You can refer to the file struture from the [data folder](https://drive.google.com/drive/folders/1lSzCNw1UQcOKfqKB1G3OSVz7dsmmWkPF?usp=sharing) in our Google Drive, where you can download the training/testing data and reference the directory structure.
 
 ### Training a model | Command line interface
 The instructions to run the command line interface is based on the original paper's implementation except we modified some of the keywords based on our datasets and our extension.
