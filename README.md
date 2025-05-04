@@ -19,7 +19,7 @@ Packages can be found in requirements.txt
 
 ## Usage:
 
-## Data Folder Configuration
+### Data Folder Configuration
 Before running, you need configure the `./data` directory. You will need to download the [NIH](https://www.kaggle.com/datasets/nih-chest-xrays/data?select=Data_Entry_2017.csv) and [MIMIC](https://physionet.org/content/mimic-cxr-jpg/2.0.0/) datasets and organize the file structure like this:
 
 ```
