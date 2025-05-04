@@ -44,7 +44,7 @@ You can refer to the file struture from the [data folder](https://drive.google.c
 ### Training a model | Command line interface
 The instructions to run the command line interface is based on the original paper's implementation except we modified some of the keywords based on our datasets and our extension.
 
-To train a model, run `python train.py dataset training` from the command line. The argument 'dataset' specificies which dataset to use for training, and can be either 'MIMIC' or 'NIH'. The argument 'training' indicates whether to follow the standard training procedure or to train the adversarial view-invariant model. This argument can be either 'Standard', 'Adversarial', or 'Advanced'. 
+To train the models, run `python train.py dataset training` from terminal. The 'dataset' argume allows user to specify the dataset to use for training should be either ('MIMIC' or 'NIH'). The argument 'training' indicates whether to follow the standard training procedure or to train the adversarial view-invariant model. This argument can be either 'Standard', 'Adversarial', or 'Advanced'. 
 
 ### Testing a model | Command line interface
 
