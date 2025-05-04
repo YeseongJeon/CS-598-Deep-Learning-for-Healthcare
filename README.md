@@ -42,12 +42,10 @@ data/
 You can refer to the file struture from the [data folder](https://drive.google.com/drive/folders/1lSzCNw1UQcOKfqKB1G3OSVz7dsmmWkPF?usp=sharing) in our Google Drive, where you can download the training/testing data and reference the directory structure.
 
 ### Training a model | Command line interface
-The instructions to run the command line interface is based on the original paper's implementation except we modified some of the keywords based on our datasets and our extension.
+The instructions to train/test the command line interface is based on the original paper's implementation except we modified some of the keywords based on our datasets and our extension.
 
-To train the models, run `python train.py dataset training` from terminal. The 'dataset' argume allows user to specify the dataset to use for training should be either ('MIMIC' or 'NIH'). The argument 'training' indicates whether to follow the standard training procedure or to train the adversarial view-invariant model. This argument can be either 'Standard', 'Adversarial', or 'Advanced'. 
+To train the models, run `python train.py dataset training` from terminal. The 'dataset' argume allows user to specify the dataset to use for training should be either ('MIMIC' or 'NIH'). The 'training' argument allows the user to choose between the standard, adversarial, or advanced adversarial model (either 'Standard', 'Adversarial', or 'Advanced'). 
 
 ### Testing a model | Command line interface
 
-The instructions to run the command line interface is based on the original paper's implementation except we modified some of the keywords based on our datasets and our extension.
-
-To test a model, simply run `python test.py model_path training`, where 'model_path' is the path to the saved model you would like to test, and 'training' specifies whether the model was trained as a 'Standard', 'Adversarial' or 'Advanced' model.
+To test the models, run `python test.py model_path training`. The 'model_path' argument is the path to the saved .pkl file of the model to test. The 'training' argument specifies whether the model was trained as a 'Standard', 'Adversarial' or 'Advanced' model.
