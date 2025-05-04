@@ -30,6 +30,10 @@ def _find_index(ds, desired_label):
 
 
 class Adversary(Module):
+    """
+    Adversary model definition from the original paper's code. 
+    We added a few modifications to the device to add testing flexiblity on our local and google Colab environments.
+    """
     def __init__(self, n_sensitive, n_hidden=32):
         super(Adversary, self).__init__()
         self.network = torch.nn.Sequential(
@@ -51,9 +55,13 @@ class Adversary(Module):
 
 
 class SmartAdversary(Module):
-    # Extension: Instead of using standard Adversarial classifier from the paper, we created a smarter version with:
-    #   (1) - BatchNormalization
-    #   (2) - Dropout
+    """
+    Our extension of the original paper.
+    Instead of using standard Adversarial classifier from the paper, we created a smarter version with:
+       (1) - BatchNormalization
+       (2) - Dropout
+    """
+    
     def __init__(self, n_sensitive, n_hidden=128, dropout_rate=0.3):
         super(SmartAdversary, self).__init__()
         self.network = torch.nn.Sequential(
@@ -83,7 +91,10 @@ class SmartAdversary(Module):
 
 
 class CXRClassifier(object):
-    'A classifier for various pathologies found in chest radiographs'
+    """
+    Standard Chest X-Ray classifier from original paper. 
+    We added a few modifications to the device to add testing flexiblity and to configure our datasets. 
+    """
 
     def __init__(self):
         '''
@@ -339,10 +350,11 @@ class CXRClassifier(object):
 
 
 class CXRAdvClassifier(object):
-    '''A CXR classifier f(X) that is independent of AP/PA View.
-    Based on "Learning to Pivot with Adversarial Networks" (Louppe et al. 2016). 
-    Code also inspired by PyTorch implementation found on
-    https://github.com/equialgo/fairness-in-ml/blob/master/fairness-in-torch.ipynb'''
+    """
+    Adversarial Chest X-Ray classifier from original paper. 
+    We added a few modifications to the device to add testing flexiblity and to configure our datasets. 
+    We also added a parameter to allow user to select between the standard (original) adversarial model and our 'smart' adversarial model from our extension.
+    """
 
     def __init__(self, adv_model = "standard"):
         '''

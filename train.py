@@ -10,7 +10,13 @@ from cxrdataset import MIMICDataset, NIHDataset
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+"""
+Training Functions for the Models:
+This file leverages functions used from the original repository in addition to updates and new methods we implemented.
 
+"""
+
+# Helper function to return the index. From the original paper's code
 def _find_index(ds, desired_label):
     desired_index = None
     for ilabel, label in enumerate(ds.labels):
@@ -22,7 +28,7 @@ def _find_index(ds, desired_label):
     else:
         raise ValueError("Label {:s} not found.".format(desired_label))
 
-
+# Train the standard Chest X-Ray classification model. From the original paper's code
 def _train_standard(datasetclass, checkpoint_path, logpath):
     trainds = datasetclass(fold='train')
     valds = datasetclass(fold='val')
@@ -49,7 +55,7 @@ def _train_standard(datasetclass, checkpoint_path, logpath):
         probs_pneumonia)
     print("area under ROC curve of pneumonia: {:.04f}".format(auroc))
 
-
+# Train the adversarial Chest X-Ray classification model. From the original paper's code
 def _train_adversarial(datasetclass, checkpoint_path, logpath):
     trainds = datasetclass(fold='train')
     valds = datasetclass(fold='val')
@@ -75,6 +81,7 @@ def _train_adversarial(datasetclass, checkpoint_path, logpath):
         probs_pneumonia)
     print("area under ROC curve of pneumonia: {:.04f}".format(auroc))
 
+# Train the advanced adversarial model based on our extension of the original paper. 
 def _train_advanced_adversarial(datasetclass, checkpoint_path, logpath):
     """
     Extension of standard adversarial model from the paper to use a more robust adversarial model.
@@ -128,12 +135,11 @@ def main():
     elif args.dataset == 'MIMIC' and args.training == 'Adversarial':
         _train_adversarial(
             MIMICDataset, 'mimic_adversarial_model.pkl', 'mimic_adversarial.log')
-        
+    # We included parameters to test the Advanced adversarial model based on our extension proposal
     elif args.dataset == 'MIMIC' and args.training == 'Advanced':
         _train_advanced_adversarial(MIMICDataset, 'mimic_advSMART_model.pkl', 'mimic_advSMART.log')
     elif args.dataset == 'NIH' and args.training == 'Advanced':
         _train_advanced_adversarial(NIHDataset, 'NIH_advSMART_model.pkl', 'NIH_advSMART.log')
-        
     else:
         print('arguments not understood')
 

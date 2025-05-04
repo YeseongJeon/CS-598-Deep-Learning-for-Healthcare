@@ -153,6 +153,11 @@ class CXRDataset(torch.utils.data.Dataset):
 
 
 class CheXpertDataset(CXRDataset):
+    """
+    Dataset to load the CheXpert X-Ray images dataset from the original paper. 
+    We didn't use this since we didn't utilize the CheXpert dataset.
+    """
+
     def __init__(
             self,
             fold,
@@ -261,14 +266,18 @@ class CheXpertDataset(CXRDataset):
 
 
 class NIHDataset(CXRDataset):
+    """
+    Dataset to load the NIH X-Ray images dataset. 
+    We followed the logic from the CheXpert Dataset implementation from the original paper and configued it for our NIH Dataset.
+    """
+
     def __init__(
             self,
             fold,
             include_lateral=False,
-            random_state=30493):
+            random_state=31242):
         '''
-        Create a dataset of the CheXPert images for use in a PyTorch model.
-
+        
         Args:
             fold (str): The shard of the CheXPert data that the dataset should
                 contain. One of either 'train', 'val', or 'test'. The 'test'
@@ -371,6 +380,10 @@ class NIHDataset(CXRDataset):
 
 
 class MIMICDataset(CXRDataset):
+    """
+    Dataset to load the MIMIC X-Ray images dataset.
+    We modified the original implementation to fit our data organization and also added the AP/PA labels.
+    """
     def __init__(
             self,
             fold,

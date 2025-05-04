@@ -1,0 +1,242 @@
+Q1:
+Provide an example python dataset class that inherits torch.utils.data.Dataset to configure a CNN. Assume we have parameters to the file path containing all images and a csv file containing the different labels stored as columns, the file path of the image, and the patient and study id.
+
+A1:
+
+Here’s a clean and modular example of a custom PyTorch Dataset class for configuring a CNN using image data and labels from a CSV file. This version assumes:
+
+You have:
+
+A directory of images (e.g., JPEG or PNG format)
+
+A CSV file with:
+
+path column: relative file paths to the images
+
+multiple diagnosis columns (e.g., Pneumonia, Cardiomegaly, etc.)
+
+metadata columns like patient_id and study_id
+
+✅ Example: CXRDataset Class
+python
+Copy
+import os
+import pandas as pd
+from PIL import Image
+import torch
+from torch.utils.data import Dataset
+import torchvision.transforms as transforms
+
+class CXRDataset(Dataset):
+    def __init__(self, img_dir, csv_path, transform=None, label_columns=None):
+        """
+        Args:
+            img_dir (str): Path to the directory containing images.
+            csv_path (str): Path to the CSV file with labels and image paths.
+            transform (callable, optional): Optional image transformations.
+            label_columns (list of str): List of column names to be used as labels.
+        """
+        self.img_dir = img_dir
+        self.df = pd.read_csv(csv_path)
+        self.label_columns = label_columns if label_columns else self.df.columns.difference(['path', 'patient_id', 'study_id'])
+        self.transform = transform if transform else transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor()
+        ])
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        img_path = os.path.join(self.img_dir, row['path'])
+        image = Image.open(img_path).convert("RGB")
+        image = self.transform(image)
+
+        labels = torch.tensor(row[self.label_columns].values.astype(float), dtype=torch.float32)
+
+        return image, labels, row['patient_id'], row['study_id']
+Q2:
+Provide example configurations of an x ray classification model containing a densenet 121 based CNN and a simple adversarial model to remove biases. Explain the optimal parameters for training a dataset based on 5K images.
+
+A2:
+
+Here’s a well-structured example of how to configure a DenseNet-121 CNN for X-ray classification, along with an adversarial model to reduce bias (e.g., view position AP/PA). This is tailored for a dataset of ~5K X-rays.
+
+🩺 CNN Model
+python
+Copy
+import torchvision.models as models
+import torch.nn as nn
+
+class CXRClassifier(nn.Module):
+    def __init__(self, n_labels):
+        super().__init__()
+        base_model = models.densenet121(pretrained=True)
+        num_features = base_model.classifier.in_features
+        base_model.classifier = nn.Sequential(
+            nn.Linear(num_features, n_labels),
+            nn.Sigmoid()
+        )
+        self.model = base_model
+
+    def forward(self, x):
+        return self.model(x)
+🛡️ Adversary Model
+python
+Copy
+class Adversary(nn.Module):
+    def __init__(self, input_dim=1, hidden_dim=32, output_dim=1):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, output_dim),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
+🔧 Hyperparameter Recommendations for 5K Images
+Component	Value	Notes
+Batch Size	16 or 32	Stable with small datasets
+Epochs	20–50	Enough to converge
+Learning Rate	0.001 (classifier), 0.0001 (adv)	Stable learning
+Optimizer	SGD for classifier, Adam for adversary	Empirically strong pair
+Loss Function	BCELoss	For binary/multi-label
+λ (lambda)	0.5 (tune 0.1–1.0)	Controls adversarial pressure
+Input Size	(224, 224)	Standard for DenseNet
+Augmentations	Resize, Normalize, RandomHorizontalFlip	Helps generalize
+
+Q3:
+Give an example of a simple use case where we would use the model in a training loop.
+
+A3:
+
+Here’s a simple, complete use case of how to train the CXRClassifier (DenseNet-121) on a small dataset:
+
+python
+Copy
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from tqdm import tqdm
+
+# 1. Load Dataset
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])
+])
+
+label_cols = ['Pneumonia']
+train_dataset = CXRDataset(img_dir='data/MIMIC', csv_path='data/mimic_train.csv',
+                           transform=transform, label_columns=label_cols)
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+
+# 2. Model
+model = CXRClassifier(n_labels=len(label_cols))
+model = model.to('cuda' if torch.cuda.is_available() else 'cpu')
+
+# 3. Loss + Optimizer
+optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+criterion = nn.BCELoss()
+
+# 4. Train
+for epoch in range(5):
+    model.train()
+    epoch_loss = 0
+
+    for imgs, labels, _, _ in tqdm(train_loader):
+        imgs, labels = imgs.to(model.device), labels.to(model.device)
+
+        optimizer.zero_grad()
+        outputs = model(imgs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item()
+
+    print(f"Epoch {epoch:03d}, Loss: {epoch_loss / len(train_loader):.4f}")
+Q4:
+To create a training loop, show how we would start with the configuring dataset based on our existing file paths and train the model.
+
+A4:
+
+Here’s a complete example pipeline that starts from configuring your dataset and leads into training a CNN:
+
+🧱 Dataset Class
+(see same as Q1)
+
+🧠 Classifier
+python
+Copy
+import torchvision.models as models
+import torch.nn as nn
+
+class CXRClassifier(nn.Module):
+    def __init__(self, num_labels):
+        super().__init__()
+        base = models.densenet121(pretrained=True)
+        in_features = base.classifier.in_features
+        base.classifier = nn.Sequential(
+            nn.Linear(in_features, num_labels),
+            nn.Sigmoid()
+        )
+        self.model = base
+
+    def forward(self, x):
+        return self.model(x)
+🚀 Training Pipeline
+python
+Copy
+from torch.utils.data import DataLoader
+import torch
+from tqdm import tqdm
+
+# Config
+IMG_ROOT = 'data/MIMIC'
+CSV_PATH = 'data/mimic_train.csv'
+LABEL_COLS = ['Pneumonia', 'Edema', 'Effusion']
+BATCH_SIZE = 16
+EPOCHS = 5
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# Dataset & Loader
+train_ds = CXRDataset(IMG_ROOT, CSV_PATH, LABEL_COLS)
+train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+
+# Model
+model = CXRClassifier(num_labels=len(LABEL_COLS)).to(DEVICE)
+
+# Loss & Optimizer
+criterion = nn.BCELoss()
+optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+
+# Training Loop
+for epoch in range(EPOCHS):
+    model.train()
+    epoch_loss = 0
+
+    for imgs, labels, _, _ in tqdm(train_loader):
+        imgs, labels = imgs.to(DEVICE), labels.to(DEVICE)
+        optimizer.zero_grad()
+        preds = model(imgs)
+        loss = criterion(preds, labels)
+        loss.backward()
+        optimizer.step()
+        epoch_loss += loss.item()
+
+    print(f"Epoch {epoch+1}/{EPOCHS}, Loss: {epoch_loss/len(train_loader):.4f}")
+Would you like this log exported as a .txt, .md, or .pdf file for your records or submission?
+
+
+
+
+
+
