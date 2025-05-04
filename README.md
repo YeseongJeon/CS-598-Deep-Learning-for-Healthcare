@@ -1,6 +1,6 @@
 # CS598 Deep Learning for Healthcare Final Project
 
-Final Project repository for Taoran Shen and Yeseong Jeong.
+Final Project repository for Taoran Shen and Yeseong Jeon.
 
 This contains our implementation/replication of the results from the paper: "An Adversarial Approach for the Robust Classification of Pneumonia from Chest Radiographs" (Joseph D. Janizek, Gabriel Erion, Alex J. DeGrave, Su-In Lee, 2020) 
 
