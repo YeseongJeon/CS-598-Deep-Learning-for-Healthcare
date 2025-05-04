@@ -22,7 +22,22 @@ Packages can be found in requirements.txt
 ## Data Folder Configuration
 Before running, you need configure the `./data` directory. You will need to download the [NIH](https://www.kaggle.com/datasets/nih-chest-xrays/data?select=Data_Entry_2017.csv) and [MIMIC](https://physionet.org/content/mimic-cxr-jpg/2.0.0/) datasets and organize the file structure like this:
 
-<pre> <code> data/ ├── MIMIC/ │ ├── p10xxxx/ │ │ └── s504142676.../ │ │ └── image.jpg │ ├── p10xxx1.../ │ ├── mimic_train.csv │ └── mimic_valid.csv ├── NIH/ │ ├── images_001/ │ │ ├── 000000001_001.png │ │ └── 000000001_002.png │ ├── nih_train.csv │ └── nih_valid.csv </code> </pre>
+```
+data/
+├── MIMIC/
+│   ├── p10xxxx/
+│   │   └── s504142676.../
+│   │       └── image.jpg
+│   ├── p10xxx1.../
+│   ├── mimic_train.csv
+│   └── mimic_valid.csv
+├── NIH/
+│   ├── images_001/
+│   │   ├── 000000001_001.png
+│   │   └── 000000001_002.png
+│   ├── nih_train.csv
+│   └── nih_valid.csv
+```
 
 You can refer to the file struture from the [data folder](https://drive.google.com/drive/folders/1lSzCNw1UQcOKfqKB1G3OSVz7dsmmWkPF?usp=sharing) in our Google Drive, where you can download the training/testing data and reference the directory structure.
 
